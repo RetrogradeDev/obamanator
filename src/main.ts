@@ -153,7 +153,6 @@ let frameCount = 0;
 
 // Image transformation system
 let secondImageData: ImageData | null = null;
-let isTransformMode = false;
 
 // Caching for pixel mapping
 let cachedMappings: PixelMapping[] | null = null;
@@ -678,52 +677,36 @@ async function createFeatureAwarePixelMapping(
 async function initParticles() {
 	particles = [];
 
-	if (isTransformMode && secondImageData) {
-		// Transformation mode: use pixel mapping from image 2 to image 1
-		const targetData = createSourceImage();
+	if (!secondImageData) {
+		console.warn("Please load a second image for transformation mode.");
 
-		// Choose mapping algorithm based on quality preference
-		let mappings = await createFeatureAwarePixelMapping(
-			targetData,
-			secondImageData,
+		return;
+	}
+
+	// Transformation mode: use pixel mapping from image 2 to image 1
+	const targetData = createSourceImage();
+
+	// Choose mapping algorithm based on quality preference
+	let mappings = await createFeatureAwarePixelMapping(
+		targetData,
+		secondImageData,
+	);
+
+	for (let i = 0; i < mappings.length; i++) {
+		const mapping = mappings[i];
+		const particle = new Particle(
+			mapping.targetX, // Target position (image 1)
+			mapping.targetY,
+			mapping.sourceX, // Source position (image 2)
+			mapping.sourceY,
+			mapping.r, // Source colors (image 2)
+			mapping.g,
+			mapping.b,
 		);
-
-		for (let i = 0; i < mappings.length; i++) {
-			const mapping = mappings[i];
-			const particle = new Particle(
-				mapping.targetX, // Target position (image 1)
-				mapping.targetY,
-				mapping.sourceX, // Source position (image 2)
-				mapping.sourceY,
-				mapping.r, // Source colors (image 2)
-				mapping.g,
-				mapping.b,
-			);
-			// Start particles at source positions (image 2)
-			particle.x = mapping.sourceX;
-			particle.y = mapping.sourceY;
-			particles.push(particle);
-		}
-	} else {
-		// Standard mode: reconstruct single image
-		const sourceData = createSourceImage();
-
-		for (let y = 0; y < height; y += step) {
-			for (let x = 0; x < width; x += step) {
-				const i = (y * width + x) * 4;
-				particles.push(
-					new Particle(
-						x,
-						y,
-						0,
-						0,
-						sourceData.data[i],
-						sourceData.data[i + 1],
-						sourceData.data[i + 2],
-					),
-				);
-			}
-		}
+		// Start particles at source positions (image 2)
+		particle.x = mapping.sourceX;
+		particle.y = mapping.sourceY;
+		particles.push(particle);
 	}
 }
 
@@ -784,6 +767,11 @@ function render() {
 				data[idx + 3] = 255;
 			}
 		}
+		// const idx = (py * width + px) * 4;
+		// data[idx] = p.r;
+		// data[idx + 1] = p.g;
+		// data[idx + 2] = p.b;
+		// data[idx + 3] = 255;
 	}
 
 	ctx.putImageData(imageData, 0, 0);
@@ -820,12 +808,10 @@ async function updateComputationProgress(percent: number, message: string) {
 }
 
 // Toggle between single image and transformation modes
-function toggleTransformMode() {
+async function transform() {
 	secondImageData = createSecondImage();
 
 	if (secondImageData) {
-		isTransformMode = !isTransformMode;
-
 		// Stop current animation
 		isRunning = false;
 		if (animationId) {
@@ -833,27 +819,9 @@ function toggleTransformMode() {
 		}
 
 		// Reinitialize particles with new mode
-		initParticles();
+		await initParticles();
 		initGrid();
 		frameCount = 0;
-
-		// Update UI
-		const toggleTransformBtn = document.getElementById("toggleTransformBtn");
-		const qualityToggleBtn = document.getElementById("qualityToggleBtn");
-
-		if (toggleTransformBtn) {
-			const span = toggleTransformBtn.querySelector("span");
-			if (span) {
-				span.textContent = isTransformMode
-					? "Single Image Mode"
-					: "Transform Mode";
-			}
-		}
-
-		// Show/hide quality toggle based on transform mode
-		if (qualityToggleBtn) {
-			qualityToggleBtn.style.display = isTransformMode ? "flex" : "none";
-		}
 
 		// Reset UI state
 		const playIcon = document.getElementById("playIcon")!;
@@ -866,6 +834,7 @@ function toggleTransformMode() {
 
 		progressBar.style.width = "0%";
 		progressText.textContent = "0.0%";
+
 		render();
 	} else {
 		alert(
@@ -928,21 +897,13 @@ resetBtn.addEventListener("click", () => {
 
 	// Reset particles
 	for (let i = 0; i < particles.length; i++) {
-		if (isTransformMode) {
-			const p = particles[i];
-			// Reset to source positions (image 2)
-			p.x = p.sourceX;
-			p.y = p.sourceY;
+		const p = particles[i];
+		// Reset to source positions (image 2)
+		p.x = p.sourceX;
+		p.y = p.sourceY;
 
-			p.vx = 0;
-			p.vy = 0;
-		} else {
-			const p = particles[i];
-			p.x = Math.random() * width;
-			p.y = Math.random() * height;
-			p.vx = 0;
-			p.vy = 0;
-		}
+		p.vx = 0;
+		p.vy = 0;
 	}
 
 	// Reset frame counter
@@ -954,9 +915,9 @@ resetBtn.addEventListener("click", () => {
 });
 
 // Transform mode toggle handler
-const toggleTransformBtn = document.getElementById("toggleTransformBtn");
-if (toggleTransformBtn) {
-	toggleTransformBtn.addEventListener("click", toggleTransformMode);
+const startTransformBtn = document.getElementById("startTransformBtn");
+if (startTransformBtn) {
+	startTransformBtn.addEventListener("click", transform);
 }
 
 // Initialize
