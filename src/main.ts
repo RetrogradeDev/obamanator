@@ -123,6 +123,7 @@ const pauseIcon = document.getElementById("pauseIcon")!;
 const toggleText = document.getElementById("toggleText")!;
 const progressBar = document.getElementById("progressBar")!;
 const progressText = document.getElementById("progressText")!;
+const progressLabel = document.getElementById("progressLabel")!;
 
 // State
 let isRunning = false;
@@ -211,14 +212,17 @@ function colorDistance(
 }
 
 // Ultra-advanced algorithm: Feature-aware mapping that prioritizes important regions
-function createFeatureAwarePixelMapping(
+async function createFeatureAwarePixelMapping(
 	targetData: ImageData,
 	sourceData: ImageData,
-): PixelMapping[] {
+): Promise<PixelMapping[]> {
 	const mappings: PixelMapping[] = [];
 	console.log(
 		"Creating feature-aware pixel mapping with importance weighting...",
 	);
+
+	// Update progress bar for computation
+	await updateComputationProgress(0, "Analyzing image features...");
 
 	// Collect all pixels with feature importance
 	const targetPixels: Array<{
@@ -327,6 +331,8 @@ function createFeatureAwarePixelMapping(
 		`Processing ${targetPixels.length} pixels with feature-aware algorithm...`,
 	);
 
+	await updateComputationProgress(10, "Sorting pixels by importance...");
+
 	// Sort target pixels by importance (most important first)
 	targetPixels.sort((a, b) => b.importance - a.importance);
 
@@ -401,6 +407,8 @@ function createFeatureAwarePixelMapping(
 		`Source colors: ${skinSources.length} skin, ${darkSources.length} dark, ${blueSources.length} blue, ${otherSources.length} other`,
 	);
 
+	await updateComputationProgress(20, "Classifying color regions...");
+
 	// Phase 1a: Assign dark features to dark sources (highest priority)
 	const assignBestColorMatch = (
 		targetIndices: number[],
@@ -440,11 +448,21 @@ function createFeatureAwarePixelMapping(
 	};
 
 	// Assign in priority order to prevent color mismatches
+	await updateComputationProgress(30, "Assigning dark features...");
 	assignBestColorMatch(darkPixels, darkSources); // Dark features get dark pixels first
+
+	await updateComputationProgress(40, "Assigning skin areas...");
 	assignBestColorMatch(skinPixels, skinSources); // Skin areas get skin-colored pixels
 
 	// Phase 1b: Assign remaining high-importance pixels
 	for (let t = 0; t < targetPixels.length; t++) {
+		if (t % 1000 === 0) {
+			await updateComputationProgress(
+				50 + Math.floor((t / targetPixels.length) * 25),
+				"Assigning important features...",
+			);
+		}
+
 		if (assignment[t] !== -1) continue; // Already assigned
 
 		const target = targetPixels[t];
@@ -483,6 +501,12 @@ function createFeatureAwarePixelMapping(
 
 	// Phase 1c: Assign remaining pixels with balanced approach
 	for (let t = 0; t < targetPixels.length; t++) {
+		if (t % 1000 === 0) {
+			await updateComputationProgress(
+				75 + Math.floor((t / targetPixels.length) * 25),
+				"Finalizing pixel assignments...",
+			);
+		}
 		if (assignment[t] !== -1) continue; // Already assigned
 
 		const target = targetPixels[t];
@@ -553,12 +577,13 @@ function createFeatureAwarePixelMapping(
 		});
 	}
 
+	await updateComputationProgress(100, "Mapping complete!");
 	console.log(`Created ${mappings.length} feature-aware pixel mappings.`);
 	return mappings;
 }
 
 // Initialize particles (supports both single image and transformation modes)
-function initParticles() {
+async function initParticles() {
 	particles = [];
 
 	if (isTransformMode && secondImageData) {
@@ -566,7 +591,7 @@ function initParticles() {
 		const targetData = createSourceImage();
 
 		// Choose mapping algorithm based on quality preference
-		let mappings: PixelMapping[] = createFeatureAwarePixelMapping(
+		let mappings = await createFeatureAwarePixelMapping(
 			targetData,
 			secondImageData,
 		);
@@ -689,8 +714,17 @@ function updateProgress() {
 		Math.min(100, 100 - (Math.sqrt(avgDistSq) / Math.sqrt(maxDistSq)) * 200),
 	);
 
-	progressBar.style.width = progress + "%";
-	progressText.textContent = progress.toFixed(1) + "%";
+	updateComputationProgress(Math.floor(progress * 10) / 10, "Rendering...");
+}
+
+// Update progress during computation phases
+async function updateComputationProgress(percent: number, message: string) {
+	progressBar.style.width = percent + "%";
+	progressLabel.textContent = message;
+	progressText.textContent = percent + "%";
+
+	// Pause briefly to allow UI update
+	await new Promise((resolve) => setTimeout(resolve, 25));
 }
 
 // Toggle between single image and transformation modes
