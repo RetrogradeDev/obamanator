@@ -139,6 +139,32 @@ const progressBar = document.getElementById("progressBar")!;
 const progressText = document.getElementById("progressText")!;
 const progressLabel = document.getElementById("progressLabel")!;
 
+// Setup phase UI elements
+const setupContainer = document.getElementById("setupContainer")!;
+const simulationContainer = document.getElementById("simulationContainer")!;
+// const targetImageInput = document.getElementById(
+// 	"targetImageInput",
+// ) as HTMLInputElement;
+const sourceImageInput = document.getElementById(
+	"sourceImageInput",
+) as HTMLInputElement;
+// const targetUploadArea = document.getElementById("targetUploadArea")!;
+const sourceUploadArea = document.getElementById("sourceUploadArea")!;
+const targetPreview = document.getElementById("targetPreview")!;
+const sourcePreview = document.getElementById("sourcePreview")!;
+const targetPreviewImg = document.getElementById(
+	"targetPreviewImg",
+) as HTMLImageElement;
+const sourcePreviewImg = document.getElementById(
+	"sourcePreviewImg",
+) as HTMLImageElement;
+const startSimulationBtn = document.getElementById(
+	"startSimulationBtn",
+)! as HTMLButtonElement;
+const backToSetupBtn = document.getElementById("backToSetupBtn")!;
+// const targetExamples = document.getElementById("targetExamples")!;
+const sourceExamples = document.getElementById("sourceExamples")!;
+
 // State
 let isRunning = false;
 let animationId: number | null = null;
@@ -153,6 +179,14 @@ let frameCount = 0;
 
 // Image transformation system
 let secondImageData: ImageData | null = null;
+
+// UI state management
+let targetImageSet = false;
+let sourceImageSet = false;
+
+setTimeout(() => {
+	targetImageSet = true; // TODO: Get out
+}, 1000);
 
 // Caching for pixel mapping
 let cachedMappings: PixelMapping[] | null = null;
@@ -189,13 +223,7 @@ function createSourceImage() {
 	sourceCanvas.height = height;
 	const sourceCtx = sourceCanvas.getContext("2d")!;
 
-	sourceCtx.drawImage(
-		document.getElementById("sourceImage") as HTMLImageElement,
-		0,
-		0,
-		width,
-		height,
-	);
+	sourceCtx.drawImage(targetPreviewImg, 0, 0, width, height);
 
 	return sourceCtx.getImageData(0, 0, width, height);
 }
@@ -794,6 +822,23 @@ function updateProgress() {
 		Math.min(100, 100 - (Math.sqrt(avgDistSq) / Math.sqrt(maxDistSq)) * 200),
 	);
 
+	if (progress > 99.9) {
+		updateComputationProgress(100, "Complete!");
+		// Stop animation
+		isRunning = false;
+		if (animationId) {
+			cancelAnimationFrame(animationId);
+			animationId = null;
+		}
+
+		// Update UI state
+		playIcon.style.display = "block";
+		pauseIcon.style.display = "none";
+		toggleText.textContent = "Play";
+
+		return;
+	}
+
 	updateComputationProgress(Math.floor(progress * 10) / 10, "Rendering...");
 }
 
@@ -807,40 +852,33 @@ async function updateComputationProgress(percent: number, message: string) {
 	await new Promise((resolve) => setTimeout(resolve, 25));
 }
 
-// Toggle between single image and transformation modes
 async function transform() {
 	secondImageData = createSecondImage();
 
-	if (secondImageData) {
-		// Stop current animation
-		isRunning = false;
-		if (animationId) {
-			cancelAnimationFrame(animationId);
-		}
-
-		// Reinitialize particles with new mode
-		await initParticles();
-		initGrid();
-		frameCount = 0;
-
-		// Reset UI state
-		const playIcon = document.getElementById("playIcon")!;
-		const pauseIcon = document.getElementById("pauseIcon")!;
-		const toggleText = document.getElementById("toggleText")!;
-
-		playIcon.style.display = "block";
-		pauseIcon.style.display = "none";
-		toggleText.textContent = "Start";
-
-		progressBar.style.width = "0%";
-		progressText.textContent = "0.0%";
-
-		render();
-	} else {
-		alert(
-			"Please add a second image with id 'secondImage' to enable transformation mode!",
-		);
+	// Stop current animation
+	isRunning = false;
+	if (animationId) {
+		cancelAnimationFrame(animationId);
 	}
+
+	// Reinitialize particles with new mode
+	await initParticles();
+	initGrid();
+	frameCount = 0;
+
+	// Reset UI state
+	const playIcon = document.getElementById("playIcon")!;
+	const pauseIcon = document.getElementById("pauseIcon")!;
+	const toggleText = document.getElementById("toggleText")!;
+
+	playIcon.style.display = "block";
+	pauseIcon.style.display = "none";
+	toggleText.textContent = "Start";
+
+	progressBar.style.width = "0%";
+	progressText.textContent = "0.0%";
+
+	render();
 }
 
 // Optimized animation loop
@@ -865,6 +903,218 @@ function animate() {
 		animationId = requestAnimationFrame(animate);
 	}
 }
+
+// UI Utility Functions
+function updateStartButtonState() {
+	if (targetImageSet && sourceImageSet) {
+		startSimulationBtn.disabled = false;
+		const hint = document.querySelector(".start-hint") as HTMLElement;
+		if (hint) hint.textContent = "Ready to start simulation!";
+	} else {
+		startSimulationBtn.disabled = true;
+		const hint = document.querySelector(".start-hint") as HTMLElement;
+		if (hint) hint.textContent = "Select both images to continue";
+	}
+}
+
+function showSetupPhase() {
+	setupContainer.style.display = "block";
+	simulationContainer.style.display = "none";
+}
+
+function showSimulationPhase() {
+	setupContainer.style.display = "none";
+	simulationContainer.style.display = "block";
+}
+
+// Image handling functions
+function loadImageFromFile(file: File, isTarget: boolean) {
+	const reader = new FileReader();
+	reader.onload = (e) => {
+		const img = new Image();
+		img.onload = () => {
+			if (isTarget) {
+				targetImageSet = true;
+				targetPreviewImg.src = img.src;
+				targetPreview.style.display = "block";
+				// Set the hidden sourceImage for the simulation
+				(document.getElementById("sourceImage")! as HTMLImageElement).src =
+					img.src;
+			} else {
+				sourceImageSet = true;
+				sourcePreviewImg.src = img.src;
+				sourcePreview.style.display = "block";
+				// Create image data for the simulation
+				const tempCanvas = document.createElement("canvas");
+				tempCanvas.width = width;
+				tempCanvas.height = height;
+				const tempCtx = tempCanvas.getContext("2d")!;
+				tempCtx.drawImage(img, 0, 0, width, height);
+				secondImageData = tempCtx.getImageData(0, 0, width, height);
+			}
+			updateStartButtonState();
+		};
+		img.src = e.target?.result as string;
+	};
+	reader.readAsDataURL(file);
+}
+
+function loadImageFromUrl(url: string, isTarget: boolean) {
+	const img = new Image();
+	img.crossOrigin = "anonymous"; // For external URLs
+	img.onload = () => {
+		if (isTarget) {
+			targetImageSet = true;
+			targetPreviewImg.src = url;
+			targetPreview.style.display = "block";
+			// Set the hidden sourceImage for the simulation
+			(document.getElementById("sourceImage")! as HTMLImageElement).src = url;
+		} else {
+			sourceImageSet = true;
+			sourcePreviewImg.src = url;
+			sourcePreview.style.display = "block";
+			// Create image data for the simulation
+			const tempCanvas = document.createElement("canvas");
+			tempCanvas.width = width;
+			tempCanvas.height = height;
+			const tempCtx = tempCanvas.getContext("2d")!;
+			tempCtx.drawImage(img, 0, 0, width, height);
+			secondImageData = tempCtx.getImageData(0, 0, width, height);
+		}
+		updateStartButtonState();
+	};
+	img.onerror = () => {
+		alert(`Failed to load image: ${url}`);
+	};
+	img.src = url;
+}
+
+// Setup Phase Event Handlers
+
+// File upload handling
+// targetImageInput.addEventListener("change", (e) => {
+// 	const file = (e.target as HTMLInputElement).files?.[0];
+// 	if (file) {
+// 		loadImageFromFile(file, true);
+// 	}
+// });
+
+sourceImageInput.addEventListener("change", (e) => {
+	const file = (e.target as HTMLInputElement).files?.[0];
+	if (file) {
+		loadImageFromFile(file, false);
+	}
+});
+
+// Upload area click handling
+// targetUploadArea.addEventListener("click", () => {
+// 	targetImageInput.click();
+// });
+
+sourceUploadArea.addEventListener("click", () => {
+	sourceImageInput.click();
+});
+
+// Drag and drop handling
+function setupDragAndDrop(
+	uploadArea: HTMLElement,
+	_input: HTMLInputElement,
+	isTarget: boolean,
+) {
+	uploadArea.addEventListener("dragover", (e) => {
+		e.preventDefault();
+		uploadArea.classList.add("dragover");
+	});
+
+	uploadArea.addEventListener("dragleave", () => {
+		uploadArea.classList.remove("dragover");
+	});
+
+	uploadArea.addEventListener("drop", (e) => {
+		e.preventDefault();
+		uploadArea.classList.remove("dragover");
+
+		const files = e.dataTransfer?.files;
+		if (files && files.length > 0) {
+			const file = files[0];
+			if (file.type.startsWith("image/")) {
+				loadImageFromFile(file, isTarget);
+			} else {
+				alert("Please select an image file");
+			}
+		}
+	});
+}
+
+// setupDragAndDrop(targetUploadArea, targetImageInput, true);
+setupDragAndDrop(sourceUploadArea, sourceImageInput, false);
+
+// Example image selection
+// targetExamples.addEventListener("click", (e) => {
+// 	const target = e.target as HTMLElement;
+// 	const exampleDiv = target.closest(".example-image") as HTMLElement;
+// 	if (exampleDiv) {
+// 		// Remove previous selection
+// 		targetExamples
+// 			.querySelectorAll(".example-image")
+// 			.forEach((el) => el.classList.remove("selected"));
+// 		// Select current
+// 		exampleDiv.classList.add("selected");
+
+// 		const src = exampleDiv.dataset.src;
+// 		if (src) {
+// 			loadImageFromUrl(src, true);
+// 		}
+// 	}
+// });
+
+sourceExamples.addEventListener("click", (e) => {
+	const target = e.target as HTMLElement;
+	const exampleDiv = target.closest(".example-image") as HTMLElement;
+	if (exampleDiv) {
+		// Remove previous selection
+		sourceExamples
+			.querySelectorAll(".example-image")
+			.forEach((el) => el.classList.remove("selected"));
+		// Select current
+		exampleDiv.classList.add("selected");
+
+		const src = exampleDiv.dataset.src;
+		if (src) {
+			loadImageFromUrl(src, false);
+		}
+	}
+});
+
+// Start simulation button
+startSimulationBtn.addEventListener("click", async () => {
+	if (targetImageSet && sourceImageSet) {
+		showSimulationPhase();
+
+		await initParticles();
+		initGrid();
+		frameCount = 0;
+		render();
+	}
+});
+
+// Back to setup button
+backToSetupBtn.addEventListener("click", () => {
+	// Stop any running animation
+	isRunning = false;
+	if (animationId) {
+		cancelAnimationFrame(animationId);
+	}
+
+	// Reset UI state
+	playIcon.style.display = "block";
+	pauseIcon.style.display = "none";
+	toggleText.textContent = "Start";
+	progressBar.style.width = "0%";
+	progressText.textContent = "0.0%";
+
+	showSetupPhase();
+});
 
 // Event handlers
 toggleBtn.addEventListener("click", () => {
@@ -920,7 +1170,5 @@ if (startTransformBtn) {
 	startTransformBtn.addEventListener("click", transform);
 }
 
-// Initialize
-initParticles();
-initGrid(); // Initialize the persistent grid system
-render();
+// Initialize - Start with setup phase
+showSetupPhase();

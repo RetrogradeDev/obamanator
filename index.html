@@ -127,14 +127,424 @@
 				width: 20px;
 				height: 20px;
 			}
+
+			/* Setup Phase Styles */
+			.setup-container {
+				max-width: 800px;
+				margin: 0 auto;
+				padding: 40px 20px;
+			}
+
+			.setup-content h1 {
+				text-align: center;
+				margin-bottom: 12px;
+			}
+
+			.setup-content .subtitle {
+				text-align: center;
+				margin-bottom: 40px;
+			}
+
+			.setup-steps {
+				display: flex;
+				flex-direction: column;
+				gap: 32px;
+			}
+
+			.setup-step {
+				background: #1e293b;
+				border-radius: 12px;
+				padding: 24px;
+				border: 1px solid #334155;
+			}
+
+			.setup-step h3 {
+				color: #f1f5f9;
+				font-size: 20px;
+				margin-bottom: 8px;
+			}
+
+			.step-description {
+				color: #94a3b8;
+				font-size: 14px;
+				margin-bottom: 20px;
+			}
+
+			.image-selection {
+				display: flex;
+				gap: 24px;
+				align-items: flex-start;
+			}
+
+			.upload-area {
+				flex: 1;
+				border: 2px dashed #475569;
+				border-radius: 8px;
+				padding: 16px 20px;
+				text-align: center;
+				cursor: pointer;
+				transition: all 0.3s ease;
+				background: #0f172a;
+			}
+
+			.upload-area:hover {
+				border-color: #8b5cf6;
+				background: #1e1b4b;
+			}
+
+			.upload-area.dragover {
+				border-color: #8b5cf6;
+				background: #1e1b4b;
+				transform: scale(1.02);
+			}
+
+			.upload-content {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 12px;
+			}
+
+			.upload-icon {
+				width: 48px;
+				height: 48px;
+				color: #8b5cf6;
+			}
+
+			.upload-content p {
+				font-size: 16px;
+				font-weight: 500;
+				color: #f1f5f9;
+				margin: 0;
+			}
+
+			.upload-hint {
+				font-size: 14px;
+				color: #94a3b8;
+			}
+
+			.examples-section {
+				flex: 1;
+			}
+
+			.examples-title {
+				font-size: 14px;
+				color: #94a3b8;
+				margin-bottom: 12px;
+				text-align: center;
+			}
+
+			.example-images {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+				gap: 12px;
+			}
+
+			.example-image {
+				cursor: pointer;
+				border-radius: 8px;
+				overflow: hidden;
+				transition: all 0.3s ease;
+				background: #334155;
+				border: 2px solid transparent;
+			}
+
+			.example-image:hover {
+				transform: translateY(-2px);
+				border-color: #8b5cf6;
+				box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
+			}
+
+			.example-image.selected {
+				border-color: #8b5cf6;
+				box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.5);
+			}
+
+			.example-image img {
+				width: 100%;
+				height: 80px;
+				object-fit: cover;
+				display: block;
+			}
+
+			.example-image span {
+				display: block;
+				padding: 8px;
+				font-size: 12px;
+				text-align: center;
+				color: #e2e8f0;
+				background: #334155;
+			}
+
+			.selected-image {
+				margin-top: 20px;
+				text-align: center;
+				padding: 16px;
+				background: #065f46;
+				border-radius: 8px;
+				border: 1px solid #059669;
+			}
+
+			.selected-image img {
+				max-width: 200px;
+				max-height: 150px;
+				border-radius: 4px;
+				margin-bottom: 8px;
+			}
+
+			.selected-image p {
+				color: #10b981;
+				font-weight: 500;
+				margin: 0;
+			}
+
+			.btn-start {
+				background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+				color: white;
+				font-size: 18px;
+				font-weight: 600;
+				padding: 16px 32px;
+				border: none;
+				border-radius: 12px;
+				cursor: pointer;
+				transition: all 0.3s ease;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 12px;
+				width: 100%;
+				margin-top: 16px;
+			}
+
+			.btn-start:hover:not(:disabled) {
+				transform: translateY(-2px);
+				box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+			}
+
+			.btn-start:disabled {
+				background: #374151;
+				color: #6b7280;
+				cursor: not-allowed;
+				transform: none;
+				box-shadow: none;
+			}
+
+			.start-hint {
+				text-align: center;
+				color: #94a3b8;
+				font-size: 14px;
+				margin-top: 8px;
+				margin-bottom: 0;
+			}
+
+			/* Simulation Phase Styles */
+			.simulation-header {
+				text-align: center;
+				margin-bottom: 24px;
+				position: relative;
+			}
+
+			.simulation-header h2 {
+				font-size: 24px;
+				margin-bottom: 8px;
+			}
+
+			.simulation-subtitle {
+				color: #94a3b8;
+				font-size: 14px;
+				margin-bottom: 20px;
+			}
+
+			.btn-back {
+				position: absolute;
+				top: 0;
+				left: 0;
+				background: #374151;
+				color: white;
+				border: none;
+				padding: 8px 16px;
+				border-radius: 6px;
+				cursor: pointer;
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				font-size: 14px;
+				transition: all 0.2s;
+			}
+
+			.btn-back:hover {
+				background: #4b5563;
+				transform: translateX(-2px);
+			}
+
+			/* Responsive Design */
+			@media (max-width: 768px) {
+				.image-selection {
+					flex-direction: column;
+				}
+
+				.setup-container {
+					padding: 20px 16px;
+				}
+
+				.example-images {
+					grid-template-columns: repeat(3, 1fr);
+				}
+
+				.simulation-header {
+					padding-top: 50px;
+				}
+
+				.btn-back {
+					position: static;
+					align-self: flex-start;
+					margin-bottom: 20px;
+				}
+			}
 		</style>
 	</head>
 	<body>
-		<div class="container">
-			<h1>Fluid Dynamics Pixel Flow</h1>
-			<p class="subtitle">
-				Watch pixels flow back to their original positions like a liquid
-			</p>
+		<!-- Setup Phase -->
+		<div id="setupContainer" class="setup-container">
+			<div class="setup-content">
+				<h1>Fluid Dynamics Pixel Flow</h1>
+				<p class="subtitle">
+					Transform one image into another using fluid particle dynamics
+				</p>
+
+				<div class="setup-steps">
+					<!-- Step 1: Target Image -->
+					<div class="setup-step">
+						<h3>Step 1: Choose Target Image</h3>
+						<p class="step-description">
+							This is the image that particles will form
+						</p>
+						<p>
+							Sorry, this feature is not available yet. For now, you can only
+							enjoy Obama
+						</p>
+
+						<div class="selected-image" id="targetPreview">
+							<img src="obama.png" id="targetPreviewImg" alt="Target Image" />
+							<p>Target Image Selected ✓</p>
+						</div>
+					</div>
+
+					<!-- Step 2: Source Image -->
+					<div class="setup-step">
+						<h3>Step 2: Choose Source Image</h3>
+						<p class="step-description">
+							This image provides the pixels/colors for the transformation
+						</p>
+
+						<div class="image-selection">
+							<div class="upload-area" id="sourceUploadArea">
+								<input
+									type="file"
+									id="sourceImageInput"
+									accept="image/*"
+									hidden
+								/>
+								<div class="upload-content">
+									<svg
+										class="upload-icon"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+										/>
+									</svg>
+									<p>Upload Source Image</p>
+									<span class="upload-hint">Click or drag an image here</span>
+								</div>
+							</div>
+
+							<div class="examples-section">
+								<p class="examples-title">Or choose an example:</p>
+								<div class="example-images" id="sourceExamples">
+									<div class="example-image" data-src="field.jpg">
+										<img src="field.jpg" alt="Grain Field" />
+										<span>Grain Field</span>
+									</div>
+									<div class="example-image" data-src="mountains.jpg">
+										<img src="mountains.jpg" alt="Mountain" />
+										<span>Mountains</span>
+									</div>
+									<div class="example-image" data-src="colorful.png">
+										<img src="colorful.png" alt="Colorful" />
+										<span>Colorful</span>
+									</div>
+									<div class="example-image" data-src="black-and-white.jpg">
+										<img src="black-and-white.jpg" alt="Black and White" />
+										<span>Black and White</span>
+									</div>
+								</div>
+							</div>
+						</div>
+
+						<div
+							class="selected-image"
+							id="sourcePreview"
+							style="display: none"
+						>
+							<img id="sourcePreviewImg" alt="Source Image" />
+							<p>Source Image Selected ✓</p>
+						</div>
+					</div>
+
+					<!-- Start Button -->
+					<div class="setup-step">
+						<button id="startSimulationBtn" class="btn-start" disabled>
+							<svg
+								class="icon"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M13 10V3L4 14h7v7l9-11h-7z"
+								/>
+							</svg>
+							<span>Start Simulation</span>
+						</button>
+						<p class="start-hint">Select both images to continue</p>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Simulation Phase -->
+		<div id="simulationContainer" class="container" style="display: none">
+			<div class="simulation-header">
+				<h2>Pixel Transformation</h2>
+				<p class="simulation-subtitle">
+					Watch pixels flow from source to target image
+				</p>
+				<button id="backToSetupBtn" class="btn-back">
+					<svg
+						class="icon"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M15 19l-7-7 7-7"
+						/>
+					</svg>
+					<span>Back to Setup</span>
+				</button>
+			</div>
 
 			<div class="canvas-wrapper">
 				<canvas id="canvas" width="600" height="400"></canvas>
@@ -206,33 +616,12 @@
 					</svg>
 					<span>Reset</span>
 				</button>
-
-				<button id="startTransformBtn" class="btn-secondary">
-					<svg
-						class="icon"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-						/>
-					</svg>
-					<span>Transform Image</span>
-				</button>
 			</div>
 		</div>
 
-		<img src="obama.png" alt="Obama" style="display: none" id="sourceImage" />
-		<img
-			src="image2.jpg"
-			alt="Second Image"
-			style="display: none"
-			id="secondImage"
-		/>
+		<!-- Hidden images for the simulation -->
+		<img style="display: none" id="sourceImage" />
+		<img style="display: none" id="secondImage" />
 
 		<script src="src/main.ts"></script>
 	</body>
