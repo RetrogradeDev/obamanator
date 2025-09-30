@@ -11,6 +11,7 @@ class Particle {
 	r: number;
 	g: number;
 	b: number;
+	viscosityCounter: number; // Counter for reducing viscosity calculation frequency
 
 	constructor(
 		targetX: number,
@@ -32,6 +33,7 @@ class Particle {
 		this.r = r;
 		this.g = g;
 		this.b = b;
+		this.viscosityCounter = Math.floor(Math.random() * 3); // Stagger viscosity calculations
 	}
 
 	update(grid: Particle[][], gridSize: number, gridW: number, gridH: number) {
@@ -43,69 +45,81 @@ class Particle {
 		const fx = dx * springForce;
 		const fy = dy * springForce;
 
-		// Fluid viscosity - average with nearby particles
-		let avgVx = this.vx;
-		let avgVy = this.vy;
-		let count = 1;
+		// Fluid viscosity - only calculate every 3rd frame for performance
+		this.viscosityCounter++;
+		if (this.viscosityCounter >= 3) {
+			this.viscosityCounter = 0;
 
-		// Sample nearby particles with optimized bounds
-		const gridX = Math.floor(this.x / gridSize);
-		const gridY = Math.floor(this.y / gridSize);
+			let avgVx = this.vx;
+			let avgVy = this.vy;
+			let count = 1;
 
-		// Pre-calculate grid bounds to avoid repeated Math.max/min calls
-		const minGx = Math.max(0, gridX - 1);
-		const maxGx = Math.min(gridW, gridX + 1);
-		const minGy = Math.max(0, gridY - 1);
-		const maxGy = Math.min(gridH, gridY + 1);
+			// Sample nearby particles with optimized bounds
+			const gridX = Math.floor(this.x / gridSize);
+			const gridY = Math.floor(this.y / gridSize);
 
-		// Use squared distance threshold for performance
-		const distanceThreshold = gridSize * gridSize * 4;
+			// Optimized grid bounds calculation (avoid Math.max/min)
+			const minGx = gridX > 0 ? gridX - 1 : 0;
+			const maxGx = gridX < gridW ? gridX + 1 : gridW;
+			const minGy = gridY > 0 ? gridY - 1 : 0;
+			const maxGy = gridY < gridH ? gridY + 1 : gridH;
 
-		for (let i = minGx; i <= maxGx; i++) {
-			for (let j = minGy; j <= maxGy; j++) {
-				const idx = j * (gridW + 1) + i;
-				const cell = grid[idx];
-				if (cell && cell.length > 0) {
-					for (let k = 0; k < cell.length; k++) {
-						const p = cell[k];
-						if (p !== this) {
-							const pdx = p.x - this.x;
-							const pdy = p.y - this.y;
-							const pdist = pdx * pdx + pdy * pdy;
-							if (pdist < distanceThreshold) {
-								avgVx += p.vx;
-								avgVy += p.vy;
-								count++;
+			// Use squared distance threshold for performance
+			const distanceThreshold = gridSize * gridSize * 2;
+			const gridWidth = gridW + 1;
+
+			// Optimized neighbor search with reduced object property lookups
+			for (let i = minGx; i <= maxGx; i++) {
+				for (let j = minGy; j <= maxGy; j++) {
+					const cell = grid[j * gridWidth + i];
+					if (cell) {
+						const cellLength = cell.length;
+						for (let k = 0; k < cellLength; k++) {
+							const p = cell[k];
+							if (p !== this) {
+								const pdx = p.x - this.x;
+								const pdy = p.y - this.y;
+								const pdist = pdx * pdx + pdy * pdy;
+								if (pdist < distanceThreshold) {
+									avgVx += p.vx;
+									avgVy += p.vy;
+									count++;
+								}
 							}
 						}
 					}
 				}
 			}
+
+			// Apply viscosity only if we have neighbors
+			if (count > 1) {
+				const invCount = 1 / count;
+				avgVx *= invCount;
+				avgVy *= invCount;
+
+				// Pre-calculate viscosity constants
+				const viscosity = 0.15;
+				const oneMinusViscosity = 0.85; // 1 - viscosity
+				this.vx = this.vx * oneMinusViscosity + avgVx * viscosity;
+				this.vy = this.vy * oneMinusViscosity + avgVy * viscosity;
+			}
 		}
 
-		avgVx /= count;
-		avgVy /= count;
-
-		// Blend velocity with neighbors
-		const viscosity = 0.15;
-		this.vx = this.vx * (1 - viscosity) + avgVx * viscosity;
-		this.vy = this.vy * (1 - viscosity) + avgVy * viscosity;
-
-		// Apply forces
-		this.vx += fx;
-		this.vy += fy;
-
-		// Damping
-		this.vx *= 0.94;
-		this.vy *= 0.94;
+		// Apply forces and damping in one step
+		const damping = 0.9;
+		this.vx = (this.vx + fx) * damping;
+		this.vy = (this.vy + fy) * damping;
 
 		// Update position
 		this.x += this.vx;
 		this.y += this.vy;
 
-		// Keep in bounds
-		this.x = Math.max(0, Math.min(width - 1, this.x));
-		this.y = Math.max(0, Math.min(height - 1, this.y));
+		// Optimized bounds checking with early exit
+		if (this.x < 0) this.x = 0;
+		else if (this.x >= width) this.x = width - 1;
+
+		if (this.y < 0) this.y = 0;
+		else if (this.y >= height) this.y = height - 1;
 	}
 }
 
@@ -153,15 +167,15 @@ interface PixelMapping {
 
 // Pre-calculated splat pattern for rendering
 const splatPattern = [
-	{ dx: -1, dy: -1, weight: 0.293 },
+	{ dx: -1, dy: -1, weight: 0.2 },
 	{ dx: 0, dy: -1, weight: 0.5 },
-	{ dx: 1, dy: -1, weight: 0.293 },
+	{ dx: 1, dy: -1, weight: 0.2 },
 	{ dx: -1, dy: 0, weight: 0.5 },
 	{ dx: 0, dy: 0, weight: 1.0 },
 	{ dx: 1, dy: 0, weight: 0.5 },
-	{ dx: -1, dy: 1, weight: 0.293 },
+	{ dx: -1, dy: 1, weight: 0.2 },
 	{ dx: 0, dy: 1, weight: 0.5 },
-	{ dx: 1, dy: 1, weight: 0.293 },
+	{ dx: 1, dy: 1, weight: 0.2 },
 ];
 
 // Create source image (target image - image 1)
