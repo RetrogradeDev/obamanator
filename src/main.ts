@@ -155,6 +155,11 @@ let frameCount = 0;
 let secondImageData: ImageData | null = null;
 let isTransformMode = false;
 
+// Caching for pixel mapping
+let cachedMappings: PixelMapping[] | null = null;
+let cachedTargetHash: string = "";
+let cachedSourceHash: string = "";
+
 interface PixelMapping {
 	sourceX: number;
 	sourceY: number;
@@ -225,15 +230,42 @@ function colorDistance(
 	return dr * dr + dg * dg + db * db;
 }
 
+// Create a hash of image data for caching
+function hashImageData(imageData: ImageData): string {
+	let hash = 0;
+	const data = imageData.data;
+	// Sample every 100th pixel for speed (good enough for detecting changes)
+	for (let i = 0; i < data.length; i += 400) {
+		// 400 = 100 pixels * 4 channels
+		hash = ((hash << 5) - hash + data[i]) & 0xffffffff;
+	}
+	return hash.toString(36);
+}
+
 // Ultra-advanced algorithm: Feature-aware mapping that prioritizes important regions
 async function createFeatureAwarePixelMapping(
 	targetData: ImageData,
 	sourceData: ImageData,
 ): Promise<PixelMapping[]> {
-	const mappings: PixelMapping[] = [];
 	console.log(
 		"Creating feature-aware pixel mapping with importance weighting...",
 	);
+
+	// Check cache first
+	const targetHash = hashImageData(targetData);
+	const sourceHash = hashImageData(sourceData);
+
+	if (
+		cachedMappings &&
+		cachedTargetHash === targetHash &&
+		cachedSourceHash === sourceHash
+	) {
+		console.log("Using cached pixel mappings!");
+		await updateComputationProgress(100, "Using cached mappings!");
+		return cachedMappings;
+	}
+
+	const mappings: PixelMapping[] = [];
 
 	// Update progress bar for computation
 	await updateComputationProgress(0, "Analyzing image features...");
@@ -352,7 +384,6 @@ async function createFeatureAwarePixelMapping(
 
 	// Create assignment array
 	const assignment = new Array(targetPixels.length).fill(-1);
-	const used = new Set<number>();
 
 	// Phase 1: Smart color-region aware assignment
 	// First, categorize pixels by color regions
@@ -389,7 +420,7 @@ async function createFeatureAwarePixelMapping(
 		}
 	}
 
-	// Categorize source pixels by color
+	// Categorize source pixels by color (create separate arrays for each category)
 	const skinSources: number[] = [];
 	const darkSources: number[] = [];
 	const blueSources: number[] = [];
@@ -414,6 +445,10 @@ async function createFeatureAwarePixelMapping(
 		}
 	}
 
+	// Create working copies of source arrays that we can modify
+	const availableDarkSources = [...darkSources];
+	const availableSkinSources = [...skinSources];
+
 	console.log(
 		`Color classification: ${skinPixels.length} skin, ${darkPixels.length} dark, ${backgroundPixels.length} background targets`,
 	);
@@ -424,9 +459,11 @@ async function createFeatureAwarePixelMapping(
 	await updateComputationProgress(20, "Classifying color regions...");
 
 	// Phase 1a: Assign dark features to dark sources (highest priority)
-	const assignBestColorMatch = (
+
+	// Assign in priority order to prevent color mismatches (optimized with direct removal)
+	const optimizedAssignBestColorMatch = (
 		targetIndices: number[],
-		sourceIndices: number[],
+		availableSources: number[],
 	) => {
 		for (const t of targetIndices) {
 			if (assignment[t] !== -1) continue;
@@ -434,63 +471,79 @@ async function createFeatureAwarePixelMapping(
 			const target = targetPixels[t];
 			let bestSource = -1;
 			let bestColorDist = Infinity;
+			let bestIndex = -1;
 
-			for (const s of sourceIndices) {
-				if (used.has(s)) continue;
-
+			for (let i = 0; i < availableSources.length; i++) {
+				const s = availableSources[i];
 				const source = sourcePixels[s];
-				const colorDist = colorDistance(
-					target.r,
-					target.g,
-					target.b,
-					source.r,
-					source.g,
-					source.b,
-				);
+
+				// Optimized color distance calculation
+				const dr = target.r - source.r;
+				const dg = target.g - source.g;
+				const db = target.b - source.b;
+				const colorDist = dr * dr + dg * dg + db * db;
 
 				if (colorDist < bestColorDist) {
 					bestColorDist = colorDist;
 					bestSource = s;
+					bestIndex = i;
 				}
 			}
 
 			if (bestSource !== -1) {
 				assignment[t] = bestSource;
-				used.add(bestSource);
+				// Remove from available sources array (fast removal)
+				availableSources[bestIndex] =
+					availableSources[availableSources.length - 1];
+				availableSources.pop();
 			}
 		}
 	};
 
-	// Assign in priority order to prevent color mismatches
 	await updateComputationProgress(30, "Assigning dark features...");
-	assignBestColorMatch(darkPixels, darkSources); // Dark features get dark pixels first
+	optimizedAssignBestColorMatch(darkPixels, availableDarkSources); // Dark features get dark pixels first
 
 	await updateComputationProgress(40, "Assigning skin areas...");
-	assignBestColorMatch(skinPixels, skinSources); // Skin areas get skin-colored pixels
+	optimizedAssignBestColorMatch(skinPixels, availableSkinSources); // Skin areas get skin-colored pixels
 
-	// Phase 1b: Assign remaining high-importance pixels
+	// Phase 1b: Assign remaining high-importance pixels (optimized)
+	// Combine all remaining available sources into one array
+	const availableSources: number[] = [
+		...availableDarkSources,
+		...availableSkinSources,
+		...blueSources,
+		...otherSources,
+	];
+
+	const highImportanceTargets = [];
 	for (let t = 0; t < targetPixels.length; t++) {
-		if (t % 1000 === 0) {
+		if (assignment[t] === -1 && targetPixels[t].importance > 2.0) {
+			highImportanceTargets.push(t);
+		}
+	}
+
+	console.log(
+		`Assigning ${highImportanceTargets.length} important features...`,
+	);
+
+	for (let i = 0; i < highImportanceTargets.length; i++) {
+		if (i % 500 === 0) {
 			await updateComputationProgress(
-				50 + Math.floor((t / targetPixels.length) * 25),
+				50 + Math.floor((i / highImportanceTargets.length) * 25),
 				"Assigning important features...",
 			);
 		}
 
-		if (assignment[t] !== -1) continue; // Already assigned
-
+		const t = highImportanceTargets[i];
 		const target = targetPixels[t];
-
-		// Skip if not high importance
-		if (target.importance <= 2.0) continue;
 
 		let bestSource = -1;
 		let bestColorDist = Infinity;
+		let bestIndex = -1;
 
-		// For remaining important pixels, find best color match from available sources
-		for (let s = 0; s < sourcePixels.length; s++) {
-			if (used.has(s)) continue;
-
+		// Search available sources
+		for (let j = 0; j < availableSources.length; j++) {
+			const s = availableSources[j];
 			const source = sourcePixels[s];
 			const colorDist = colorDistance(
 				target.r,
@@ -504,48 +557,65 @@ async function createFeatureAwarePixelMapping(
 			if (colorDist < bestColorDist) {
 				bestColorDist = colorDist;
 				bestSource = s;
+				bestIndex = j;
 			}
 		}
 
 		if (bestSource !== -1) {
 			assignment[t] = bestSource;
-			used.add(bestSource);
+			// Fast removal: move last element to this position and pop
+			availableSources[bestIndex] =
+				availableSources[availableSources.length - 1];
+			availableSources.pop();
 		}
 	}
 
-	// Phase 1c: Assign remaining pixels with balanced approach
+	// Phase 1c: Assign remaining pixels with balanced approach (optimized)
+	const remainingTargets = [];
 	for (let t = 0; t < targetPixels.length; t++) {
-		if (t % 1000 === 0) {
+		if (assignment[t] === -1) remainingTargets.push(t);
+	}
+
+	console.log(
+		`Finalizing ${remainingTargets.length} remaining pixel assignments...`,
+	);
+
+	// Pre-calculate constants
+	const maxSpatialDist = Math.sqrt(width * width + height * height);
+	const colorNormFactor = 441.67;
+
+	for (let i = 0; i < remainingTargets.length; i++) {
+		if (i % 1000 === 0) {
 			await updateComputationProgress(
-				75 + Math.floor((t / targetPixels.length) * 25),
+				75 + Math.floor((i / remainingTargets.length) * 24),
 				"Finalizing pixel assignments...",
 			);
 		}
-		if (assignment[t] !== -1) continue; // Already assigned
 
+		const t = remainingTargets[i];
 		const target = targetPixels[t];
 		let bestSource = -1;
 		let bestCost = Infinity;
+		let bestIndex = -1;
 
-		for (let s = 0; s < sourcePixels.length; s++) {
-			if (used.has(s)) continue;
-
+		// Use remaining available sources
+		for (let j = 0; j < availableSources.length; j++) {
+			const s = availableSources[j];
 			const source = sourcePixels[s];
-			const colorDist = colorDistance(
-				target.r,
-				target.g,
-				target.b,
-				source.r,
-				source.g,
-				source.b,
-			);
-			const spatialDist = Math.sqrt(
-				(target.x - source.x) ** 2 + (target.y - source.y) ** 2,
-			);
 
-			const normalizedColorDist = Math.sqrt(colorDist) / 441.67;
-			const normalizedSpatialDist =
-				spatialDist / Math.sqrt(width * width + height * height);
+			// Optimized distance calculations
+			const dr = target.r - source.r;
+			const dg = target.g - source.g;
+			const db = target.b - source.b;
+			const colorDistSq = dr * dr + dg * dg + db * db;
+
+			const dx = target.x - source.x;
+			const dy = target.y - source.y;
+			const spatialDistSq = dx * dx + dy * dy;
+
+			// Avoid Math.sqrt until needed
+			const normalizedColorDist = Math.sqrt(colorDistSq) / colorNormFactor;
+			const normalizedSpatialDist = Math.sqrt(spatialDistSq) / maxSpatialDist;
 
 			const combinedCost =
 				normalizedColorDist * 0.7 + normalizedSpatialDist * 0.3;
@@ -553,25 +623,28 @@ async function createFeatureAwarePixelMapping(
 			if (combinedCost < bestCost) {
 				bestCost = combinedCost;
 				bestSource = s;
+				bestIndex = j;
 			}
 		}
 
 		if (bestSource !== -1) {
 			assignment[t] = bestSource;
-			used.add(bestSource);
+			// Fast removal: move last element to this position and pop
+			availableSources[bestIndex] =
+				availableSources[availableSources.length - 1];
+			availableSources.pop();
 		}
 	}
 
-	// Phase 2: Assign any remaining unassigned pixels
+	await updateComputationProgress(80, "Finalizing remaining assignments...");
+	// Phase 2: Assign any remaining unassigned pixels (optimized)
+	// Use whatever is left in availableSources array
+	let unusedIndex = 0;
+
 	for (let t = 0; t < targetPixels.length; t++) {
-		if (assignment[t] === -1) {
-			for (let s = 0; s < sourcePixels.length; s++) {
-				if (!used.has(s)) {
-					assignment[t] = s;
-					used.add(s);
-					break;
-				}
-			}
+		if (assignment[t] === -1 && unusedIndex < availableSources.length) {
+			assignment[t] = availableSources[unusedIndex];
+			unusedIndex++;
 		}
 	}
 
@@ -590,6 +663,11 @@ async function createFeatureAwarePixelMapping(
 			b: source.b,
 		});
 	}
+
+	// Cache the results
+	cachedMappings = mappings;
+	cachedTargetHash = targetHash;
+	cachedSourceHash = sourceHash;
 
 	await updateComputationProgress(100, "Mapping complete!");
 	console.log(`Created ${mappings.length} feature-aware pixel mappings.`);
