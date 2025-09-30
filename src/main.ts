@@ -28,7 +28,7 @@ class Particle {
 		this.b = b;
 	}
 
-	update(grid: Particle[][], gridSize: number) {
+	update(grid: Particle[][], gridSize: number, gridW: number, gridH: number) {
 		// Spring force towards target
 		const dx = this.targetX - this.x;
 		const dy = this.targetY - this.y;
@@ -42,29 +42,31 @@ class Particle {
 		let avgVy = this.vy;
 		let count = 1;
 
-		// Sample nearby particles
+		// Sample nearby particles with optimized bounds
 		const gridX = Math.floor(this.x / gridSize);
 		const gridY = Math.floor(this.y / gridSize);
 
-		const gridW = Math.floor(width / gridSize) + 1;
-		const gridH = Math.floor(height / gridSize) + 1;
+		// Pre-calculate grid bounds to avoid repeated Math.max/min calls
+		const minGx = Math.max(0, gridX - 1);
+		const maxGx = Math.min(gridW, gridX + 1);
+		const minGy = Math.max(0, gridY - 1);
+		const maxGy = Math.min(gridH, gridY + 1);
 
-		for (let i = Math.max(0, gridX - 1); i <= Math.min(gridW, gridX + 1); i++) {
-			for (
-				let j = Math.max(0, gridY - 1);
-				j <= Math.min(gridH, gridY + 1);
-				j++
-			) {
+		// Use squared distance threshold for performance
+		const distanceThreshold = gridSize * gridSize * 4;
+
+		for (let i = minGx; i <= maxGx; i++) {
+			for (let j = minGy; j <= maxGy; j++) {
 				const idx = j * (gridW + 1) + i;
 				const cell = grid[idx];
-				if (cell) {
+				if (cell && cell.length > 0) {
 					for (let k = 0; k < cell.length; k++) {
 						const p = cell[k];
 						if (p !== this) {
 							const pdx = p.x - this.x;
 							const pdy = p.y - this.y;
 							const pdist = pdx * pdx + pdy * pdy;
-							if (pdist < gridSize * gridSize * 4) {
+							if (pdist < distanceThreshold) {
 								avgVx += p.vx;
 								avgVy += p.vy;
 								count++;
@@ -123,6 +125,24 @@ let particles: Particle[] = [];
 const step = 3;
 const gridSize = 8;
 
+// Performance optimizations
+let persistentGrid: Particle[][] = [];
+let gridW: number, gridH: number;
+let frameCount = 0;
+
+// Pre-calculated splat pattern for rendering
+const splatPattern = [
+	{ dx: -1, dy: -1, weight: 0.293 },
+	{ dx: 0, dy: -1, weight: 0.5 },
+	{ dx: 1, dy: -1, weight: 0.293 },
+	{ dx: -1, dy: 0, weight: 0.5 },
+	{ dx: 0, dy: 0, weight: 1.0 },
+	{ dx: 1, dy: 0, weight: 0.5 },
+	{ dx: -1, dy: 1, weight: 0.293 },
+	{ dx: 0, dy: 1, weight: 0.5 },
+	{ dx: 1, dy: 1, weight: 0.293 },
+];
+
 // Create source image
 function createSourceImage() {
 	const sourceCanvas = document.createElement("canvas");
@@ -162,26 +182,34 @@ function initParticles() {
 	}
 }
 
-// Build spatial grid for efficient neighbor lookup
-function buildGrid() {
-	const gridW = Math.floor(width / gridSize) + 1;
-	const gridH = Math.floor(height / gridSize) + 1;
-	const grid = new Array((gridW + 1) * (gridH + 1));
+// Initialize persistent grid for efficient neighbor lookup
+function initGrid() {
+	gridW = Math.floor(width / gridSize) + 1;
+	gridH = Math.floor(height / gridSize) + 1;
+	persistentGrid = new Array((gridW + 1) * (gridH + 1));
+	for (let i = 0; i < persistentGrid.length; i++) {
+		persistentGrid[i] = [];
+	}
+}
 
+// Update spatial grid (reuses existing arrays)
+function updateGrid() {
+	// Clear existing assignments (fast array clear)
+	for (let i = 0; i < persistentGrid.length; i++) {
+		persistentGrid[i].length = 0;
+	}
+
+	// Reassign particles to grid cells
 	for (let i = 0; i < particles.length; i++) {
 		const p = particles[i];
 		const gx = Math.floor(p.x / gridSize);
 		const gy = Math.floor(p.y / gridSize);
 		const idx = gy * (gridW + 1) + gx;
-
-		if (!grid[idx]) grid[idx] = [];
-		grid[idx].push(p);
+		persistentGrid[idx].push(p);
 	}
-
-	return grid;
 }
 
-// Render particles
+// Render particles with optimized splatting
 function render() {
 	ctx.fillStyle = "#000";
 	ctx.fillRect(0, 0, width, height);
@@ -189,27 +217,26 @@ function render() {
 	const imageData = ctx.createImageData(width, height);
 	const data = imageData.data;
 
-	// Render with soft splatting
+	// Render with pre-calculated splat pattern
 	for (let i = 0; i < particles.length; i++) {
 		const p = particles[i];
 		const px = Math.floor(p.x);
 		const py = Math.floor(p.y);
 
-		for (let dy = -1; dy <= 1; dy++) {
-			for (let dx = -1; dx <= 1; dx++) {
-				const nx = px + dx;
-				const ny = py + dy;
+		// Use pre-calculated splat pattern instead of calculating distances
+		for (let j = 0; j < splatPattern.length; j++) {
+			const splat = splatPattern[j];
+			const nx = px + splat.dx;
+			const ny = py + splat.dy;
 
-				if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-					const idx = (ny * width + nx) * 4;
-					const dist = Math.sqrt(dx * dx + dy * dy);
-					const weight = Math.max(0, 1 - dist / 2);
+			if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+				const idx = (ny * width + nx) * 4;
+				const weight = splat.weight;
 
-					data[idx] = Math.min(255, data[idx] + p.r * weight);
-					data[idx + 1] = Math.min(255, data[idx + 1] + p.g * weight);
-					data[idx + 2] = Math.min(255, data[idx + 2] + p.b * weight);
-					data[idx + 3] = 255;
-				}
+				data[idx] = Math.min(255, data[idx] + p.r * weight);
+				data[idx + 1] = Math.min(255, data[idx + 1] + p.g * weight);
+				data[idx + 2] = Math.min(255, data[idx + 2] + p.b * weight);
+				data[idx + 3] = 255;
 			}
 		}
 	}
@@ -217,32 +244,44 @@ function render() {
 	ctx.putImageData(imageData, 0, 0);
 }
 
-// Animation loop
-function animate() {
-	const grid = buildGrid();
-
-	// Update particles
-	for (let i = 0; i < particles.length; i++) {
-		particles[i].update(grid, gridSize);
-	}
-
-	render();
-
-	// Update progress
-	let totalDist = 0;
+// Optimized progress update (called less frequently)
+function updateProgress() {
+	let totalDistSq = 0;
 	for (let i = 0; i < particles.length; i++) {
 		const p = particles[i];
 		const dx = p.targetX - p.x;
 		const dy = p.targetY - p.y;
-		totalDist += Math.sqrt(dx * dx + dy * dy);
+		totalDistSq += dx * dx + dy * dy; // Use squared distance
 	}
 
-	const avgDist = totalDist / particles.length;
-	const maxDist = Math.sqrt(width * width + height * height);
-	const progress = Math.max(0, Math.min(100, 100 - (avgDist / maxDist) * 200));
+	const avgDistSq = totalDistSq / particles.length;
+	const maxDistSq = width * width + height * height;
+	const progress = Math.max(
+		0,
+		Math.min(100, 100 - (Math.sqrt(avgDistSq) / Math.sqrt(maxDistSq)) * 200),
+	);
 
 	progressBar.style.width = progress + "%";
 	progressText.textContent = progress.toFixed(1) + "%";
+}
+
+// Optimized animation loop
+function animate() {
+	// Use optimized grid update instead of rebuilding
+	updateGrid();
+
+	// Update particles with optimized parameters
+	for (let i = 0; i < particles.length; i++) {
+		particles[i].update(persistentGrid, gridSize, gridW, gridH);
+	}
+
+	render();
+
+	// Update progress only every 10 frames for better performance
+	if (frameCount % 10 === 0) {
+		updateProgress();
+	}
+	frameCount++;
 
 	if (isRunning) {
 		animationId = requestAnimationFrame(animate);
@@ -287,6 +326,9 @@ resetBtn.addEventListener("click", () => {
 		p.vy = 0;
 	}
 
+	// Reset frame counter
+	frameCount = 0;
+
 	progressBar.style.width = "0%";
 	progressText.textContent = "0.0%";
 	render();
@@ -294,4 +336,5 @@ resetBtn.addEventListener("click", () => {
 
 // Initialize
 initParticles();
+initGrid(); // Initialize the persistent grid system
 render();
